@@ -1,0 +1,8 @@
+[package]
+name = "zk_ecrecover"
+type = "bin"
+authors = ["ola hamid"]
+
+[dependencies]
+#nodash = { git = "https://github.com/olehmisar/nodash/", tag = "v0.41.3" }
+ecrecover = { tag = "v1.0.0", git = "https://github.com/colinnielsen/ecrecover-noir" } 
