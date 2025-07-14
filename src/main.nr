@@ -5,204 +5,138 @@
     /// e then we can check that s <= n/2
     /// e SECp256k1 used as curve order in decimal(as it's mainly used in Cryptography elliptic curves)
 use dep::ecrecover;
-use std::static_assert;
-// not needed again as i didn't change t
+// not needed again as i didn't change feild to array n the main branch
 //use nodash::pack_bytes;
-
-///----data---///
-struct ecr_values {
-    byte_r: [u8; 32],
-    byte_s: [u8; 32],
-    signature_sig: [u8; 64],
-    feild_s : Field,
-    halfN: Field,
-    // log_r: Field,
-    // log_s: Field,
+//----constant----//
+// SECP256K1 CURVE ORDER N
+fn _get_cover_order() -> ([u8; 32]) {
+    let CURVE_ODER: [u8; 32] = [ 
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
+        0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
+        0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41,
+    ];
+    (CURVE_ODER)
 }
-trait do_ECR_computation {
-    fn sig_parts_to_array(&mut self, is_s_part: bool) -> [u8; 32];
-    fn is_s_less_than_half_n(_s: [u8; 32], _n: [u8; 32]) -> bool;
-    /* todo i want to have something like an enum functionality that say the var that is beingpassed in the function below
-    if the enum is r it stores it in the ecr_values.byte_r, s it stores it in ecr_values.byte_s, and sig it stores it in ecr_values.signature_sig.
-    */
-    fn compute_field_to_array(_f: Field) -> [u8; 32]; 
+fn get_half_cover_order() -> ([u8; 32]) {
+    let HALF_CURVE_ORDER: [u8; 32] = [
+        0x7F, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
+        0x5D, 0x57, 0x6E, 0x73, 0x57, 0xA4, 0x50, 0x1D,
+        0xDF, 0xE9, 0x2F, 0x46, 0x68, 0x1B, 0x20, 0xA0
+    ];
+
+    HALF_CURVE_ORDER
 }
 
+//----data----//
+struct EcrValue {
+    signature_r: [u8; 32],
+    signature_s: [u8; 32],
+    full_signature: [u8; 64],
+    half_n: [u8; 32],
+    full_n: [u8; 32],
+}
 
-impl do_ECR_computation for ecr_values {
-    fn sig_parts_to_array(&mut self, is_s_part: bool) -> [u8; 32] {
+//----Effect----//
+trait compute_Ecrecover {
+    fn extract_signature_values(&mut self, sig: [u8; 64]);
+    fn is_signature_safe(&mut self) -> bool;
+}
 
-        // the goal here is to convert the sig_parts struct into a byte array of 32 bytes
-        // if ((self.part0 != self.part1) | (self.part2 != self.part3) | (self.part0 != self.part2)) {
-        //     static_assert(false, "part0 and part1 must be equal");
-        // }
-        // assuming part is divided into equal 16 parts
-        let mut total_bytes: [u8; 32] = [0; 32];
-        if (is_s_part == true) {
-            let part = self.feild_s;
+impl compute_Ecrecover for EcrValue {
+    fn extract_signature_values(
+        &mut self, 
+        sig: [u8; 64]) 
+    {
         
-            let mut arr_part0: [u8; 8] = [0; 8];
-            let mut arr_part1: [u8; 8] = [0; 8];
-            let mut arr_part2: [u8; 8] = [0; 8];
-            let mut arr_part3: [u8; 8] = [0; 8];
-            // ensure that each part is less than 64 bits
-            self.feild_s.assert_max_bit_size::<64>();
-            arr_part0 = part.to_be_bytes();
-            arr_part1 = part.to_be_bytes();
-            arr_part2 = part.to_be_bytes();
-            arr_part3 = part.to_be_bytes();
-            for i in 0..8 {
-                total_bytes[i] = arr_part0[i];
-            }
-
-            for i in 0..8 {
-                total_bytes[i + 8] = arr_part1[i];
-            }
-            for i in 0..8 {
-                total_bytes[i + 16] = arr_part2[i];
-            }
-            for i in 0..8 {
-                total_bytes[i + 24] = arr_part3[i];
-            }
-        } else {
-            let part = self.halfN;
-        
-            let mut arr_part0: [u8; 8] = [0; 8];
-            let mut arr_part1: [u8; 8] = [0; 8];
-            let mut arr_part2: [u8; 8] = [0; 8];
-            let mut arr_part3: [u8; 8] = [0; 8];
-            // ensure that each part is less than 64 bits
-            self.feild_s.assert_max_bit_size::<64>();
-            arr_part0 = part.to_be_bytes();
-            arr_part1 = part.to_be_bytes();
-            arr_part2 = part.to_be_bytes();
-            arr_part3 = part.to_be_bytes();
-            for i in 0..8 {
-                total_bytes[i] = arr_part0[i];
-            }
-
-            for i in 0..8 {
-                total_bytes[i + 8] = arr_part1[i];
-            }
-            for i in 0..8 {
-                total_bytes[i + 16] = arr_part2[i];
-            }
-            for i in 0..8 {
-                total_bytes[i + 24] = arr_part3[i];
-            }
-        }
-        total_bytes 
-    }
-    fn is_s_less_than_half_n(_s: [u8; 32], h_n:[u8; 32]) -> bool {
-        // check that _s <= _n/2
-        let mut result = true;
         for i in 0..32 {
-            if (_s[i] < h_n[i]) {
-                result = true; // s is less than n/2
-                
-            } else if (_s[i] > h_n[i]) {
-                result = false; // s is greater than n/2
-            }  
+            self.signature_r[i] = sig[i];
+            self.signature_s[i] = sig[i + 32];
         }
-        true 
+        // store the total sig in the struct 
+        self.full_signature = sig;
+        // store the total to the half cover order
+        self.half_n = get_half_cover_order();
+
+        // store the total to the full coveer order
+        self.full_n = _get_cover_order();
     }
     
-    fn compute_field_to_array(_f: Field) -> [u8; 32] {
-        static_assert( _f  != 0 , "Field must be greater than 0");
-        _f.to_be_bytes()
+    fn is_signature_safe(
+        &mut self
+    ) -> bool {
+
+        let s = self.signature_s;
+        let n_half = self.half_n;
+        let mut is_safe = false;
+        let mut is_break = false;
+        // compare s with n_half byte by byte 
+        for i in 0..32 {
+            if (is_break == false) {
+                if (s[i] < n_half[i]) {
+                    is_safe =  true;
+                    is_break = true; 
+                } else if(s[i] > n_half[i]) {
+                    is_safe = false;
+                    is_break = true;
+                }
+            // if the the both bytes are equal coninue to the next bytes
+            }
+        }
+        is_safe
     }
-    // fn compute_array_to_field(_arr: [u8; 32]) -> Field {
-    //     let _f = pack_bytes(_arr);
-    //     _f[0]
-    //     // solidty is 2^256 max while noir max is 2^64
-    //     //  curve order for 
-    // }
-}
-// impl do_ecrecover_check for ecr_values {
-    
-// }
-///----implementation---///
-/** 
-*/
-fn main(
+
+}   
+
+fn main (
     pub_key_x: [u8; 32],
     pub_key_y: [u8; 32],
-    mut arr_signature: [u8; 64],
-    message_hash: [u8; 32],
-    expected_address: Field,
-    F_r_signature_div16: Field,
-    F_s_signature_div16: Field,
-) -> pub (bool, Field) {
-    let mut if_arr_used: bool = false;
-    // check if the r and s sig is more that zero hence want to use  ininteger in checking the value result  
-    if ((F_r_signature_div16 == 0) | (F_s_signature_div16 == 0)) {
-        if_arr_used = false;
-    }
-    // secp256k1 curve order
-    let mut arr_curved_order: [u8; 32] = [
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF,
-    0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFF, 0xFE,
-    0xBA, 0xAE, 0xDC, 0xE6, 0xAF, 0x48, 0xA0, 0x3B,
-    0xBF, 0xD2, 0x5E, 0x8C, 0xD0, 0x36, 0x41, 0x41, 
-    ];
-    // used to convert Field to array then do the check in array/byte
-    let curved_order_div16: Field = 7237005577332262213973186563042993990802347767442181523912822696344885093396;
-
-    let mut _ecr_values = ecr_values {
-        byte_r: [0; 32],
-        byte_s: [0; 32],
-        signature_sig: [0; 64],
-        feild_s : 0,
-        halfN: 0
-         // n/2
+    signature: [u8; 64], // r and s components concatenated
+    hashed_message: [u8; 32],
+    expected_address: Field, 
+) -> pub ( bool, Field) {
+    
+    //get_cover_order();
+    let mut _ecr_values = EcrValue {
+        signature_r: [0; 32],
+        signature_s: [0; 32],
+        full_signature: [0; 64],
+        half_n: [0; 32],
+        full_n: [0; 32],
     };
-    _ecr_values.feild_s = F_s_signature_div16;
-    _ecr_values.halfN = curved_order_div16;
+    // setting data value.
+    _ecr_values.extract_signature_values(signature);
 
-    // step1- spit the signature into r and s
-    let mut r: [u8; 32] = [0; 32];
-    let mut s: [u8; 32] = [0; 32];
+    // making effect
+    let is_safe = _ecr_values.is_signature_safe();
+    
+    let address: Field = ecrecover::ecrecover(pub_key_x, pub_key_y, signature, hashed_message);
+    assert(is_safe, "the signature is not safe: s> n");
+    assert(address == expected_address, "resulting address is not the same as expecte address");
 
-    let mut is_valid = false;
-    if (if_arr_used == false) {
-        let _Field_to_arr_SigS = _ecr_values.sig_parts_to_array(true);
-        let _field_to_arr_SigHALFN = _ecr_values.sig_parts_to_array(false );
-        s = _Field_to_arr_SigS;
-        arr_curved_order = _field_to_arr_SigHALFN;
-
-        is_valid = ecr_values::is_s_less_than_half_n(s, arr_curved_order);
-    }
-    else {
-            for i in 0..32 {
-            r[i] = arr_signature[i]; // first 32 bytes of signature is r
-            s[i] = arr_signature[i + 32]; // last 32 bytes of signature is s
-        }  
-        // note that the second param represention curved order value passed in the function below
-        //let is_valid = _ecr_values.is_s_less_than_half_n(s, curved_order_div2);
-        is_valid = ecr_values::is_s_less_than_half_n(s, arr_curved_order);
-    }
-    for i in 0..32 {
-        _ecr_values.signature_sig[i] = r[i];
-        _ecr_values.signature_sig[i + 32] = s[i];
-    }
-
-
-    _ecr_values.byte_s = s;
-    _ecr_values.byte_r = r;
-
-    let address = ecrecover::ecrecover(pub_key_x, pub_key_y, arr_signature, message_hash);
-
-    std::println( address);
-    assert(expected_address == address, "address checked sucessfully!");
-    assert(is_valid == true, "valid message is false");
-
-    (is_valid, expected_address)
+    (is_safe, address)
+    
 }
 
-// #[test]
-// fn test_main() {
-//     main(1, 2);
 
-//     // Uncomment to make test fail
-//     // main(1, 1);
+
+
+// use dep::ecrecover;
+// //use std::static_assert;
+// fn main(
+//     pub_key_x: [u8; 32],
+//     pub_key_y: [u8; 32],
+//     signature: [u8; 64], // r and s components concatenated
+//     hashed_message: [u8; 32],
+//     expected_address: Field // The Ethereum address derived from the public key
+// ) {
+//     // The ecrecover function attempts to recover an Ethereum address
+//     // from the public key, signature, and hashed message.
+//     // The 'false' argument indicates an Ethereum non-prefixed hash.
+//     let address: Field = ecrecover::ecrecover(pub_key_x, pub_key_y, signature, hashed_message);
+    
+//     // Assert that the recovered address matches the expected address.
+//     // If they don't match, the proof will fail.
+//     assert(address == expected_address, "Address does not match expected address");
 // }
